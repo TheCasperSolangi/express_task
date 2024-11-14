@@ -1,4 +1,4 @@
-// config/db.js
+// Configuration to connect the application with Mongodb Database
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 
@@ -14,7 +14,7 @@ const connectDB = async () => {
     console.log('MongoDB connected...');
   } catch (error) {
     console.error(error.message);
-    process.exit(1); // Exit with failure
+    process.exit(1); // It will throw error if there is something wrong
   }
 };
 

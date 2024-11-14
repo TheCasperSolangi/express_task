@@ -1,9 +1,8 @@
-// controllers/postController.js
 const Post = require('../models/post_model');
 const User = require('../models/user_schema');
 
-const Counter = require('../counter'); // Adjust the path as needed
-// Utility function to get the next sequence number for postId
+const Counter = require('../counter'); 
+
 const getNextSequence = async (sequenceName) => {
     try {
         const counter = await Counter.findOneAndUpdate(
@@ -20,11 +19,10 @@ const getNextSequence = async (sequenceName) => {
     }
 };
 
-// Add a new post
+// This will create the new psot
 exports.addPost = async (req, res) => {
     const { title, post_body, lat, long } = req.body;
 
-    // Validation check
     if (!title || !post_body) {
         return res.status(400).json({ msg: 'Title and post body are required.' });
     }
@@ -53,7 +51,7 @@ exports.addPost = async (req, res) => {
     }
 };
 
-// Retrieve posts by userId or username
+// This will fetch post by username though it checks for userId but the routes are written such that only username will be applcable
 exports.retrievePost = async (req, res) => {
     const { userId, username } = req.params;
 
@@ -73,27 +71,21 @@ exports.retrievePost = async (req, res) => {
     }
 };
 
-// Edit a post
+
 exports.editPost = async (req, res) => {
     const { postId, title, post_body, lat, long } = req.body;
-
-    try {
-        // Ensure postId is an integer
+    try {      
         if (!Number.isInteger(postId)) {
             return res.status(400).json({ msg: 'Invalid postId. It must be an integer.' });
         }
-
-        // Query for the post by postId, not the _id
+       
         const post = await Post.findOne({ postId, userId: req.user.id });
         if (!post) return res.status(404).json({ msg: 'Post not found or unauthorized' });
-
-        // Update fields if provided
         if (title) post.title = title;
         if (post_body) post.post_body = post_body;
         if (lat) post.lat = lat;
         if (long) post.long = long;
 
-        // Save the updated post
         await post.save();
         res.json({ msg: 'Post updated successfully', post });
     } catch (error) {
@@ -107,14 +99,12 @@ exports.deletePost = async (req, res) => {
     const { postId } = req.params;
 
     if (!postId) return res.status(400).json({ msg: 'Post ID is required.' });
-
     try {
-        // Ensure postId is an integer
+ 
         if (!Number.isInteger(Number(postId))) {
             return res.status(400).json({ msg: 'Invalid postId. It must be an integer.' });
         }
 
-        // Query for the post by postId, not _id
         const post = await Post.findOneAndDelete({ postId, userId: req.user.id });
         if (!post) return res.status(404).json({ msg: 'Post not found or unauthorized' });
 
@@ -125,30 +115,28 @@ exports.deletePost = async (req, res) => {
     }
 };
 
-// controllers/postController.js
 exports.getNearbyPosts = async (req, res) => {
-    const { lat, long, radius = 5000 } = req.query; // radius in meters, default 5km
+    const { lat, long, radius = 5000 } = req.query; 
     
-    // Validate inputs
     if (!lat || !long) {
         return res.status(400).json({
             msg: 'Both latitude and longitude are required query parameters'
         });
     }
 
-    // Convert string parameters to numbers
+  
     const latitude = parseFloat(lat);
     const longitude = parseFloat(long);
     const radiusInMeters = parseFloat(radius);
 
-    // Validate coordinate values
+  
     if (isNaN(latitude) || isNaN(longitude) || isNaN(radiusInMeters)) {
         return res.status(400).json({
             msg: 'Invalid coordinates or radius. Please provide valid numbers.'
         });
     }
 
-    // Validate coordinate ranges
+
     if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
         return res.status(400).json({
             msg: 'Invalid coordinates. Latitude must be between -90 and 90, longitude between -180 and 180.'
@@ -168,7 +156,7 @@ exports.getNearbyPosts = async (req, res) => {
                                             $pow: [
                                                 { $multiply: [
                                                     { $subtract: ["$lat", latitude] },
-                                                    111.32 // km per degree of latitude
+                                                    111.32 
                                                 ]},
                                                 2
                                             ]
@@ -178,7 +166,7 @@ exports.getNearbyPosts = async (req, res) => {
                                                 { $multiply: [
                                                     { $subtract: ["$long", longitude] },
                                                     { $multiply: [
-                                                        111.32, // km per degree
+                                                        111.32, 
                                                         { $cos: { $degreesToRadians: latitude }}
                                                     ]}
                                                 ]},
@@ -188,7 +176,7 @@ exports.getNearbyPosts = async (req, res) => {
                                     ]
                                 }
                             },
-                            radiusInMeters / 1000 // Convert radius to km
+                            radiusInMeters / 1000 
                         ]
                     }
                 }
@@ -204,7 +192,6 @@ exports.getNearbyPosts = async (req, res) => {
             });
         }
 
-        // Format response to match existing structure
         res.json({
             posts: posts.map(post => ({
                 _id: post._id,
