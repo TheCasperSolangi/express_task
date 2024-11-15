@@ -184,34 +184,35 @@ exports.deletePost = async (req, res) => {
 };
 
 exports.getNearbyPosts = async (req, res) => {
-    const { lat, long, radius = 5000 } = req.query; 
-    
-    if (!lat || !long) {
-        return res.status(400).json({
-            msg: 'Both latitude and longitude are required query parameters'
-        });
-    }
-
-  
-    const latitude = parseFloat(lat);
-    const longitude = parseFloat(long);
-    const radiusInMeters = parseFloat(radius);
-
-  
-    if (isNaN(latitude) || isNaN(longitude) || isNaN(radiusInMeters)) {
-        return res.status(400).json({
-            msg: 'Invalid coordinates or radius. Please provide valid numbers.'
-        });
-    }
-
-
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-        return res.status(400).json({
-            msg: 'Invalid coordinates. Latitude must be between -90 and 90, longitude between -180 and 180.'
-        });
-    }
-
     try {
+       
+        const { radius = 5000 } = req.query;
+        const radiusInMeters = parseFloat(radius);
+
+        
+        if (isNaN(radiusInMeters) || radiusInMeters <= 0) {
+            return res.status(400).json({
+                msg: 'Invalid radius. Please provide a positive number.'
+            });
+        }
+
+       
+        const clientIp = getClientIp(req);
+        console.log('Detected IP:', clientIp);
+
+        const { latitude, longitude } = await getGeolocationFromIp(clientIp);
+        console.log('Resolved coordinates:', { latitude, longitude });
+
+       
+        if ((latitude === 0 && longitude === 0) || 
+            latitude < -90 || latitude > 90 || 
+            longitude < -180 || longitude > 180) {
+            return res.status(400).json({
+                msg: 'Could not determine valid location from IP address.',
+                debug: { ip: clientIp, coordinates: { latitude, longitude } }
+            });
+        }
+
         const posts = await Post.find({
             $and: [
                 {
@@ -256,11 +257,19 @@ exports.getNearbyPosts = async (req, res) => {
         if (posts.length === 0) {
             return res.status(404).json({
                 msg: 'No posts found within the specified radius',
+                debug: {
+                    searchLocation: { latitude, longitude },
+                    radiusInMeters,
+                    ip: clientIp
+                },
                 posts: []
             });
         }
 
         res.json({
+            searchLocation: { latitude, longitude },
+            radiusInMeters,
+            totalPosts: posts.length,
             posts: posts.map(post => ({
                 _id: post._id,
                 postId: post.postId,
@@ -270,8 +279,13 @@ exports.getNearbyPosts = async (req, res) => {
                 post_body: post.post_body,
                 lat: post.lat,
                 long: post.long,
-                createdAt: post.createdAt,
-                __v: post.__v
+                distance: calculateDistance(
+                    latitude, 
+                    longitude, 
+                    post.lat, 
+                    post.long
+                ),
+                createdAt: post.createdAt
             }))
         });
 
@@ -279,7 +293,22 @@ exports.getNearbyPosts = async (req, res) => {
         console.error("Error fetching nearby posts:", error);
         res.status(500).json({
             msg: 'Server error',
-            error: error.message
+            error: error.message,
+            debug: { stack: error.stack }
         });
     }
+};
+
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth Radius you can get this from wikipedia or from anywhere
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c * 1000; 
+    return Math.round(distance);
 };
