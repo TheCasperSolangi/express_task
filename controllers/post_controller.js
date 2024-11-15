@@ -1,6 +1,6 @@
 const Post = require('../models/post_model');
 const User = require('../models/user_schema');
-
+const axios = require('axios');
 const Counter = require('../counter'); 
 
 const getNextSequence = async (sequenceName) => {
@@ -19,9 +19,63 @@ const getNextSequence = async (sequenceName) => {
     }
 };
 
-// This will create the new psot
+const getClientIp = (req) => {
+   
+    const ip = 
+        req.headers['x-forwarded-for']?.split(',')[0] ||
+        req.headers['x-real-ip'] ||
+        req.connection.remoteAddress ||
+        req.socket.remoteAddress ||
+        req.connection.socket?.remoteAddress;
+    
+  
+    return ip?.replace(/^::ffff:/, '') || '127.0.0.1';
+};
+
+
+const getGeolocationFromIp = async (ip) => {
+    try {
+
+        if (ip === '127.0.0.1' || ip === 'localhost' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+            console.log('Local IP detected, using default coordinates');
+            return { latitude: 0, longitude: 0 };
+        }
+
+       
+        const response = await axios.get(`https://ipapi.co/${ip}/json/`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+
+        if (response.data.error) {
+            console.error('Geolocation API error:', response.data.error);
+            return { latitude: 0, longitude: 0 };
+        }
+
+      
+        console.log('Geolocation response:', {
+            ip: response.data.ip,
+            latitude: response.data.latitude,
+            longitude: response.data.longitude,
+            city: response.data.city,
+            country: response.data.country_name
+        });
+
+        return {
+            latitude: response.data.latitude,
+            longitude: response.data.longitude
+        };
+    } catch (error) {
+        console.error('Error getting geolocation:', error.response?.data || error.message);
+      
+        return { latitude: 0, longitude: 0 };
+    }
+};
+
+
 exports.addPost = async (req, res) => {
-    const { title, post_body, lat, long } = req.body;
+    const { title, post_body } = req.body;
 
     if (!title || !post_body) {
         return res.status(400).json({ msg: 'Title and post body are required.' });
@@ -31,6 +85,13 @@ exports.addPost = async (req, res) => {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ msg: 'User not found' });
 
+       
+        const clientIp = getClientIp(req);
+        console.log('Detected IP:', clientIp);
+
+        const { latitude, longitude } = await getGeolocationFromIp(clientIp);
+        console.log('Resolved coordinates:', { latitude, longitude }); 
+
         const postId = await getNextSequence('postId');
 
         const post = new Post({
@@ -39,15 +100,22 @@ exports.addPost = async (req, res) => {
             username: user.username,
             title,
             post_body,
-            lat,
-            long
+            lat: latitude,
+            long: longitude
         });
 
         await post.save();
-        res.status(201).json({ msg: 'Post added successfully', post });
+        res.status(201).json({ 
+            msg: 'Post added successfully', 
+            post,
+        });
     } catch (error) {
         console.error("Error creating post:", error);
-        res.status(500).json({ msg: 'Server error', error: error.message });
+        res.status(500).json({ 
+            msg: 'Server error', 
+            error: error.message,
+            debug: { stack: error.stack } 
+        });
     }
 };
 

@@ -10,7 +10,7 @@ router.post('/reset-password', resetPasswordCode);
 router.post('/verify-code', resetPasswordVerify);
 router.post('/new-password', resetNewPass); 
 
-router.put('/update-field', jwtMiddleware, updateUserField); 
+router.put('/update', jwtMiddleware, updateUserField); 
 router.delete('/delete-account', jwtMiddleware ,deleteAccount); 
 
 module.exports = router;
